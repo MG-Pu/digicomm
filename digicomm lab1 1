@@ -1,0 +1,74 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def nr_pss(N_ID2:int) -> np.ndarray:
+    if N_ID2 not in (0,1,2):
+        raise ValueError("N_ID2 must be 0, 1, or 2")
+
+    s=np.array([0,1,1,0,1,1,1],dtype=np.uint8)
+    c=np.zeros(127,dtype=np.uint8)
+
+    for n in range(7):
+        c[n]=s[n]
+    for n in range(120):
+        c[n+7]=c[n]^c[n+4]
+
+    shift=43*N_ID2
+    d_bin=np.roll(c,-shift)
+
+    d=(1-2*d_bin.astype(np.int8)).astype(np.float32)
+
+    return d
+
+
+def map_pss_to_fft_bins(pss127:np.ndarray, Nfft:int, k_min:int=-63) -> np.ndarray:
+    if len(pss127) != 127:
+        raise ValueError("pss127 must be length 127")
+
+    X=np.zeros(Nfft, dtype=np.complex64)
+
+    for i in range(127):
+        k=k_min+i
+        bin_idx=(k%Nfft)
+        X[bin_idx]=np.complex64(pss127[i])
+
+    return X
+
+
+def pss_time_domain(N_ID2: int, Nfft: int=2048, Ncp: int=144, k_min: int=-63):
+    pss=nr_pss(N_ID2)
+    X=map_pss_to_fft_bins(pss, Nfft, k_min)
+    x_td=np.fft.ifft(X).astype(np.complex64)
+    x_cp=np.concatenate([x_td[-Ncp:], x_td])
+
+    return x_cp
+
+
+x0=pss_time_domain(0,2048,144,-64)
+x1=pss_time_domain(1,2048,144,-64)
+x2=pss_time_domain(2,2048,144,-64)
+
+
+plt.subplot(3,1,1)
+plt.plot(np.real(x0))
+plt.title("Real part of PSS time-domain signal")
+plt.ylabel("Amplitude")
+plt.xlabel("Sample index")
+plt.grid(True)
+
+plt.subplot(3,1,2)
+plt.plot(np.imag(x0))
+plt.title("Imaginary part of PSS time-domain signal")
+plt.ylabel("Amplitude")
+plt.xlabel("Sample index")
+plt.grid(True)
+
+plt.subplot(3,1,3)
+plt.plot(np.abs(x0))
+plt.title("Magnitude (|x|) of PSS time-domain signal")
+plt.xlabel("Sample index")
+plt.ylabel("Magn1itude")
+plt.grid(True)
+
+plt.tight_layout()
+plt.show()
