@@ -63,7 +63,7 @@ n=np.arange(len(rx_delayed))
 freq_offset_vec=np.exp(2j*np.pi*true_delta_f*n/fs)#载波频偏
 rx_shifted=rx_delayed*freq_offset_vec
 
-noise=(np.random.randn(len(rx_shifted))+1j*np.random.randn(len(rx_shifted)))*0.05
+noise=(np.random.randn(len(rx_shifted))+1j*np.random.randn(len(rx_shifted)))*0.005
 y_recv=(rx_shifted+noise).astype(np.complex64)
 
 print(f"true ID={true_i}, true Nf={true_Nf}, true delta={true_delta_f}Hz")
