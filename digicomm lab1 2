@@ -1,0 +1,67 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def nr_pss(N_ID2:int) -> np.ndarray:
+    if N_ID2 not in (0,1,2):
+        raise ValueError("N_ID2 must be 0, 1, or 2")
+
+    s=np.array([0,1,1,0,1,1,1],dtype=np.uint8)
+    c=np.zeros(127,dtype=np.uint8)
+
+    for n in range(7):
+        c[n]=s[n]
+    for n in range(120):
+        c[n+7]=c[n]^c[n+4]
+
+    shift=43*N_ID2
+    d_bin=np.roll(c,-shift)
+
+    d=(1-2*d_bin.astype(np.int8)).astype(np.float32)
+
+    return d
+
+
+def map_pss_to_fft_bins(pss127:np.ndarray, Nfft:int, k_min:int=-63) -> np.ndarray:
+    if len(pss127) != 127:
+        raise ValueError("pss127 must be length 127")
+
+    X=np.zeros(Nfft, dtype=np.complex64)
+
+    for i in range(127):
+        k=k_min+i
+        bin_idx=(k%Nfft)
+        X[bin_idx]=np.complex64(pss127[i])
+
+    return X
+
+
+def pss_time_domain(N_ID2: int, Nfft: int=2048, Ncp: int=144, k_min: int=-63):
+    pss=nr_pss(N_ID2)
+    X=map_pss_to_fft_bins(pss, Nfft, k_min)
+    x_td=np.fft.ifft(X).astype(np.complex64)
+    x_cp=np.concatenate([x_td[-Ncp:], x_td])
+
+    return x_cp
+
+
+x0=pss_time_domain(0,2048,144,-64)
+x1=pss_time_domain(1,2048,144,-64)
+x2=pss_time_domain(2,2048,144,-64)
+
+
+
+fs=61.44e6
+xf=np.fft.fft(x0)
+xf_shift=np.fft.fftshift(xf)
+power=np.abs(xf_shift)**2
+power_dB=10*np.log10(power)
+freq_axis=np.fft.fftshift(np.fft.fftfreq(len(x0),1/fs))
+
+plt.figure()
+plt.plot(freq_axis/1e6,power_dB)
+plt.xlabel("Frequency(MHz)")
+plt.ylabel("Power(dB)")
+plt.title("PSS Power Spectrum, fs=61.44MHz, SCS=30kHz")
+plt.grid(True)
+plt.xlim(-5,5)
+plt.show()
