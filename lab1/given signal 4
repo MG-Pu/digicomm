@@ -169,7 +169,9 @@ with open('rxsignal_withchannel.bin','rb') as fd:
         
 fs=61.44e6
 
+N = len(rxs1)
 Y_freq=np.fft.fftshift(np.fft.fft(rxs1))
+power_dB = 10 * np.log10((np.abs(rxs1) / N)**2 + 1e-12) 
 freq_axis=np.fft.fftshift(np.fft.fftfreq(len(rxs1),1/fs))
 fig, axs=plt.subplots(2,1,figsize=(10,8))
 
@@ -179,7 +181,7 @@ axs[0].set_xlabel("Sample Index")
 axs[0].set_ylabel("Amplitude")
 axs[0].grid(True)
 
-power_dB=10*np.log10(np.abs(rxs1)**2)
+#power_dB=10*np.log10(np.abs(rxs1)**2)
 axs[1].plot(freq_axis / 1e6, power_dB)
 axs[1].set_xlim(-5, 5)
 axs[1].set_title("Frequency Domain (dB scale)")
