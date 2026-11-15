@@ -1,0 +1,77 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def nr_pss(N_ID2:int) -> np.ndarray:
+    if N_ID2 not in (0,1,2):
+        raise ValueError("N_ID2 must be 0, 1, or 2")
+
+    s=np.array([0,1,1,0,1,1,1],dtype=np.uint8)
+    c=np.zeros(127,dtype=np.uint8)
+
+    for n in range(7):
+        c[n]=s[n]
+    for n in range(120):
+        c[n+7]=c[n]^c[n+4]
+
+    shift=43*N_ID2
+    d_bin=np.roll(c,-shift)
+
+    d=(1-2*d_bin.astype(np.int8)).astype(np.float32)
+
+    return d
+
+
+def map_pss_to_fft_bins(pss127:np.ndarray, Nfft:int, k_min:int=-63) -> np.ndarray:
+    if len(pss127) != 127:
+        raise ValueError("pss127 must be length 127")
+
+    X=np.zeros(Nfft, dtype=np.complex64)
+
+    for i in range(127):
+        k=k_min+i
+        bin_idx=(k%Nfft)
+        X[bin_idx]=np.complex64(pss127[i])
+
+    return X
+
+
+def pss_time_domain(N_ID2: int, Nfft: int=2048, Ncp: int=144, k_min: int=-63):
+    pss=nr_pss(N_ID2)
+    X=map_pss_to_fft_bins(pss, Nfft, k_min)
+    x_td=np.fft.ifft(X).astype(np.complex64)
+    x_cp=np.concatenate([x_td[-Ncp:], x_td])
+
+    return x_cp
+
+
+x0=pss_time_domain(0,2048,144,-64)
+x1=pss_time_domain(1,2048,144,-64)
+x2=pss_time_domain(2,2048,144,-64)
+
+
+
+
+lags=np.arange(-len(x0)+1, len(x0))
+
+fig, axs=plt.subplots(3,2,sharey=True,figsize=(15,12))
+ac0=np.correlate(x0,x0,mode='full')
+axs[0,0].plot(lags,np.real(ac0));axs[0,0].set_title("Auto-correlation x0")
+ac1=np.correlate(x1,x1,mode='full')
+axs[1,0].plot(lags,np.real(ac1));axs[1,0].set_title("Auto-correlation x1")
+ac2=np.correlate(x2,x2,mode='full')
+axs[2,0].plot(lags,np.real(ac2));axs[2,0].set_title("Auto-correlation x2")
+
+cc01=np.correlate(x0,x1,mode='full')
+axs[0,1].plot(lags,np.real(cc01));axs[0,1].set_title("Cross-correlation x0 & x1")
+cc02=np.correlate(x0,x2,mode='full')
+axs[1,1].plot(lags,np.real(cc02));axs[1,1].set_title("Cross-correlation x0 & x2")
+cc12=np.correlate(x1,x2,mode='full')
+axs[2,1].plot(lags,np.real(cc12));axs[2,1].set_title("Cross-correlation x1 & x2")
+
+for ax in axs.flat:
+    ax.set_xlabel("Lag")
+    ax.set_ylabel("Correlation")
+    ax.set_ylim(top=0.08)
+    ax.grid(True)
+plt.tight_layout()
+plt.show()
