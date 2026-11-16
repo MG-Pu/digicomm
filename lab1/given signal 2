@@ -171,50 +171,55 @@ with open('rxsignal_withchannel.bin','rb') as fd:
     for k,v in table.items():
         rxs2 = v
 
+rxs2_1d = np.ravel(rxs2)
+rxs1_1d = np.ravel(rxs1)
+rxs0_1d = np.ravel(rxs0)
+
+rxs1_1d = rxs1_1d[:16384 ]
+rxs2_1d = rxs2_1d[:16384 ]
+rxs0_1d = rxs0_1d[:16384 ]
+
 fs=61.44e6
-xf=np.fft.fft(rxs0)
-xf_shift=np.fft.fftshift(xf)
-power=np.abs(xf_shift)**2
-power_dB=10*np.log10(power)
-freq_axis=np.fft.fftshift(np.fft.fftfreq(len(rxs0),1/fs))
+N = len(rxs0_1d)
+Y_freq=np.fft.fftshift(np.fft.fft(rxs0_1d))
+power_dB = 10 * np.log10((np.abs(Y_freq) / N)**2 + 1e-12) 
+freq_axis=np.fft.fftshift(np.fft.fftfreq(len(rxs0_1d),1/fs))
 
 plt.figure()
 plt.plot(freq_axis/1e6,power_dB)
 plt.xlabel("Frequency(MHz)")
 plt.ylabel("Power(dB)")
-plt.title("PSS Power Spectrum, fs=61.44MHz, SCS=30kHz")
+plt.title("rxsignal_justnoise Power Spectrum, fs=61.44MHz, SCS=30kHz")
 plt.grid(True)
 plt.xlim(-5,5)
 plt.show()
 
 fs=61.44e6
-xf=np.fft.fft(rxs1)
-xf_shift=np.fft.fftshift(xf)
-power=np.abs(xf_shift)**2
-power_dB=10*np.log10(power)
-freq_axis=np.fft.fftshift(np.fft.fftfreq(len(rxs1),1/fs))
+N = len(rxs1_1d)
+Y_freq=np.fft.fftshift(np.fft.fft(rxs1_1d))
+power_dB = 10 * np.log10((np.abs(Y_freq) / N)**2 + 1e-12) 
+freq_axis=np.fft.fftshift(np.fft.fftfreq(len(rxs1_1d),1/fs))
 
 plt.figure()
 plt.plot(freq_axis/1e6,power_dB)
 plt.xlabel("Frequency(MHz)")
 plt.ylabel("Power(dB)")
-plt.title("PSS Power Spectrum, fs=61.44MHz, SCS=30kHz")
+plt.title("rxsignal_withchannelandfrequencyoff Power Spectrum, fs=61.44MHz, SCS=30kHz")
 plt.grid(True)
 plt.xlim(-5,5)
 plt.show()
 
 fs=61.44e6
-xf=np.fft.fft(rxs2)
-xf_shift=np.fft.fftshift(xf)
-power=np.abs(xf_shift)**2
-power_dB=10*np.log10(power)
-freq_axis=np.fft.fftshift(np.fft.fftfreq(len(rxs2),1/fs))
+N = len(rxs2_1d)
+Y_freq=np.fft.fftshift(np.fft.fft(rxs2_1d))
+power_dB = 10 * np.log10((np.abs(Y_freq) / N)**2 + 1e-12) 
+freq_axis=np.fft.fftshift(np.fft.fftfreq(len(rxs2_1d),1/fs))
 
 plt.figure()
 plt.plot(freq_axis/1e6,power_dB)
 plt.xlabel("Frequency(MHz)")
 plt.ylabel("Power(dB)")
-plt.title("PSS Power Spectrum, fs=61.44MHz, SCS=30kHz")
+plt.title("rxsignal_withchannel Power Spectrum, fs=61.44MHz, SCS=30kHz")
 plt.grid(True)
 plt.xlim(-5,5)
 plt.show()
