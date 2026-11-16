@@ -69,7 +69,6 @@ y_recv=(rx_shifted+noise).astype(np.complex64)
 print(f"true ID={true_i}, true Nf={true_Nf}, true delta={true_delta_f}Hz")
 
 
-
 N = len(y_recv)
 Y_freq=np.fft.fftshift(np.fft.fft(y_recv))
 power_dB = 10 * np.log10((np.abs(Y_freq) / N)**2 + 1e-12) 
