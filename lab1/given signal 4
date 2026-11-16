@@ -169,13 +169,19 @@ with open('rxsignal_withchannel.bin','rb') as fd:
         
 fs=61.44e6
 
-N = len(rxs1)
-Y_freq=np.fft.fftshift(np.fft.fft(rxs1))
-power_dB = 10 * np.log10((np.abs(rxs1) / N)**2 + 1e-12) 
-freq_axis=np.fft.fftshift(np.fft.fftfreq(len(rxs1),1/fs))
+rxs2_1d = np.ravel(rxs2)
+rxs1_1d = np.ravel(rxs1)
+
+rxs1_1d = rxs1_1d[:16384]
+rxs2_1d = rxs2_1d[:16384]
+
+N = len(rxs1_1d)
+Y_freq=np.fft.fftshift(np.fft.fft(rxs1_1d))
+power_dB = 10 * np.log10((np.abs(Y_freq) / N)**2 + 1e-12) 
+freq_axis=np.fft.fftshift(np.fft.fftfreq(len(rxs1_1d),1/fs))
 fig, axs=plt.subplots(2,1,figsize=(10,8))
 
-axs[0].plot(np.abs(rxs1))
+axs[0].plot(np.abs(rxs1_1d))
 axs[0].set_title("Time Domain(Magnitude)")
 axs[0].set_xlabel("Sample Index")
 axs[0].set_ylabel("Amplitude")
@@ -192,11 +198,11 @@ axs[1].grid(True)
 plt.tight_layout()
 plt.show()
 
-rxs2_1d = np.ravel(rxs2)
+'''rxs2_1d = np.ravel(rxs2)
 rxs1_1d = np.ravel(rxs1)
 
-rxs1_1d = rxs1_1d[:5000]
-rxs2_1d = rxs2_1d[:5000]
+rxs1_1d = rxs1_1d[:20000]
+rxs2_1d = rxs2_1d[:20000]'''
 
 N1 = len(rxs1_1d)
 N2 = len(rxs2_1d)
@@ -228,7 +234,7 @@ delta_f_min=100#最小分辨率
 m_values=np.arange(-75,76)#从-75到75
 Y_peaks=[]#把每次匹配出来的能量装进去
 #n_seq=np.arange(N_pss)#生成序列0-2191，画旋转补偿向量
-y_aligned = y_aligned[:5000]
+y_aligned = y_aligned[:16384]
 n_seq=np.arange(len(y_aligned))
 
 
