@@ -43,132 +43,32 @@ def pss_time_domain(N_ID2: int, Nfft: int=2048, Ncp: int=144, k_min: int=-63):
 
     return x_cp
 
+
 x0=pss_time_domain(0,2048,144,-64)
 x1=pss_time_domain(1,2048,144,-64)
 x2=pss_time_domain(2,2048,144,-64)
 
-fs=61.44e6
-true_i=2
-true_Nf=300
-true_delta_f=3000
 
-tx_sig=x2
+plt.subplot(3,1,1)
+plt.plot(np.real(x0))
+plt.title("Real part of PSS time-domain signal")
+plt.ylabel("Amplitude")
+plt.xlabel("Sample index")
+plt.grid(True)
 
-channel=np.array([1.0+0.0j, 0.5*np.exp(1j*np.pi/4),0.3*np.exp(-1j*np.pi/3)])#三个信道
-rx_multipath=np.convolve(tx_sig, channel, mode='full')
+plt.subplot(3,1,2)
+plt.plot(np.imag(x0))
+plt.title("Imaginary part of PSS time-domain signal")
+plt.ylabel("Amplitude")
+plt.xlabel("Sample index")
+plt.grid(True)
 
-rx_delayed=np.concatenate([np.zeros(true_Nf, dtype=np.complex64), rx_multipath])#前面补0，频偏
-
-n=np.arange(len(rx_delayed))
-freq_offset_vec=np.exp(2j*np.pi*true_delta_f*n/fs)#载波频偏
-rx_shifted=rx_delayed*freq_offset_vec
-
-noise=(np.random.randn(len(rx_shifted))+1j*np.random.randn(len(rx_shifted)))*0.005
-y_recv=(rx_shifted+noise).astype(np.complex64)
-
-print(f"true ID={true_i}, true Nf={true_Nf}, true delta={true_delta_f}Hz")
-
-
-N = len(y_recv)
-Y_freq=np.fft.fftshift(np.fft.fft(y_recv))
-power_dB = 10 * np.log10((np.abs(Y_freq) / N)**2 + 1e-12) 
-freq_axis=np.fft.fftshift(np.fft.fftfreq(len(y_recv),1/fs))
-fig, axs=plt.subplots(2,1,figsize=(10,8))
-
-axs[0].plot(np.abs(y_recv))
-axs[0].set_title("Time Domain(Magnitude)")
-axs[0].set_xlabel("Sample Index")
-axs[0].set_ylabel("Amplitude")
-axs[0].grid(True)
-
-#power_dB=10*np.log10(np.abs(Y_freq)**2)
-axs[1].plot(freq_axis / 1e6, power_dB)
-axs[1].set_xlim(-5, 5)
-axs[1].set_title("Frequency Domain (dB scale)")
-axs[1].set_xlabel("Frequency (MHz)")
-axs[1].set_ylabel("Power (dB)")
-axs[1].grid(True)
+plt.subplot(3,1,3)
+plt.plot(np.abs(x0))
+plt.title("Magnitude (|x|) of PSS time-domain signal")
+plt.xlabel("Sample index")
+plt.ylabel("Magn1itude")
+plt.grid(True)
 
 plt.tight_layout()
 plt.show()
-
-
-
-corr_0=np.abs(np.correlate(y_recv, x0, mode='full'))**2
-corr_1=np.abs(np.correlate(y_recv, x1, mode='full'))**2
-corr_2=np.abs(np.correlate(y_recv, x2, mode='full'))**2
-
-plt.figure(figsize=(10,5))
-plt.plot(corr_0, label='Matched Filter for x0')
-plt.plot(corr_1, label='Matched Filter for x1')
-plt.plot(corr_2, label='Matched Filter for x2')
-plt.title("Matched Filter Outputs (m=0)")
-plt.xlabel("Lag (Sample Index)")
-plt.ylabel("Correlation Power")
-plt.grid(True)
-plt.show()
-
-peaks=[np.max(corr_0), np.max(corr_1), np.max(corr_2)]
-est_i=np.argmax(peaks)#取最大值所在的参数
-print(f"most likely is i={est_i}")
-
-best_corr=[corr_0, corr_1, corr_2][est_i]
-max_idx=np.argmax(best_corr)#取出它的长度
-
-N_pss=len(x0)
-est_Nf=max_idx-(N_pss-1)#减去就得到N的偏移
-print(f"most likely Nf={est_Nf}")
-
-
-y_aligned=y_recv[est_Nf:est_Nf+N_pss]#通过时延，把完整pss取出来
-missing_len = N_pss - len(y_aligned)
-y_aligned = np.pad(y_aligned, (0, missing_len), mode='constant')#防止信号不够长，后方补0
-x_local=[x0,x1,x2][est_i]
-
-delta_f_min=100#最小分辨率
-m_values=np.arange(-75,76)#从-75到75
-Y_peaks=[]#把每次匹配出来的能量装进去
-n_seq=np.arange(N_pss)#生成序列0-2191，画旋转补偿向量
-
-for m in m_values:
-    freq_corr_vec=np.exp(-2j*np.pi*n_seq*m*delta_f_min/fs)#造一个反向旋转的向量，抵消频偏
-    Y_val=np.abs(np.sum(y_aligned*np.conj(x_local)*freq_corr_vec))**2#乘本地模板、补偿向量，求和、求平方
-    Y_peaks.append(Y_val)#记录结果，conj取共轭接收信号和本地模板相乘（匹配滤波）
-#如果m对应的频偏恰好等于接受信号里的真实频偏，那么freq_corr_vec就会把接收信号里原本旋转的相位摆正
-#y_aligned和x_local完美对其，同相相加，能量最大
-Y_peaks=np.array(Y_peaks)
-
-plt.figure(figsize=(10, 5))
-plt.plot(m_values * delta_f_min, Y_peaks, marker='.')
-plt.title("Frequency Offset Estimation Statistic Y")
-plt.xlabel("Frequency Offset (Hz)")
-plt.ylabel("Peak Value")
-plt.grid(True)
-plt.show()
-
-best_m = m_values[np.argmax(Y_peaks)]#找最大的，然后返回它的索引位置
-est_delta_f = best_m * delta_f_min
-print(f"delta = {est_delta_f} Hz (true delta {true_delta_f})")
-
-def binary_search_freq_offset(y, x, fs, bounds=(-7500, 7500), iterations=8):
-    low, high = bounds
-    for step in range(iterations):
-        mid1 = low + (high - low) / 3
-        mid2 = high - (high - low) / 3
-        
-        # 计算两个点的 Y 值
-        n_seq = np.arange(len(x))
-        Y_mid1 = np.abs(np.sum(y * np.conj(x) * np.exp(-2j * np.pi * n_seq * mid1 / fs)))**2
-        Y_mid2 = np.abs(np.sum(y * np.conj(x) * np.exp(-2j * np.pi * n_seq * mid2 / fs)))**2
-        
-        # 缩小范围
-        if Y_mid1 > Y_mid2:
-            high = mid2
-        else:
-            low = mid1
-            
-    return (low + high) / 2
-
-# 使用二分查找
-est_delta_f_binary = binary_search_freq_offset(y_aligned, x_local, fs, bounds=(-7500, 7500), iterations=25)
-print(f"delta binary= {est_delta_f_binary:.2f} Hz")
