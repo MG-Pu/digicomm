@@ -49,19 +49,26 @@ x1=pss_time_domain(1,2048,144,-64)
 x2=pss_time_domain(2,2048,144,-64)
 
 
-
-fs=61.44e6
-xf=np.fft.fft(x0)
-xf_shift=np.fft.fftshift(xf)
-power=np.abs(xf_shift)**2
-power_dB=10*np.log10(power)
-freq_axis=np.fft.fftshift(np.fft.fftfreq(len(x0),1/fs))
-
-plt.figure()
-plt.plot(freq_axis/1e6,power_dB)
-plt.xlabel("Frequency(MHz)")
-plt.ylabel("Power(dB)")
-plt.title("PSS Power Spectrum, fs=61.44MHz, SCS=30kHz")
+plt.subplot(3,1,1)
+plt.plot(np.real(x0))
+plt.title("Real part of PSS time-domain signal")
+plt.ylabel("Amplitude")
+plt.xlabel("Sample index")
 plt.grid(True)
-plt.xlim(-5,5)
+
+plt.subplot(3,1,2)
+plt.plot(np.imag(x0))
+plt.title("Imaginary part of PSS time-domain signal")
+plt.ylabel("Amplitude")
+plt.xlabel("Sample index")
+plt.grid(True)
+
+plt.subplot(3,1,3)
+plt.plot(np.abs(x0))
+plt.title("Magnitude (|x|) of PSS time-domain signal")
+plt.xlabel("Sample index")
+plt.ylabel("Magn1itude")
+plt.grid(True)
+
+plt.tight_layout()
 plt.show()
