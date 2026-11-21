@@ -1,0 +1,378 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def nr_pss(N_ID2:int) -> np.ndarray:
+    if N_ID2 not in (0,1,2):
+        raise ValueError("N_ID2 must be 0, 1, or 2")
+
+    s=np.array([0,1,1,0,1,1,1],dtype=np.uint8)
+    c=np.zeros(127,dtype=np.uint8)
+
+    for n in range(7):
+        c[n]=s[n]
+    for n in range(120):
+        c[n+7]=c[n]^c[n+4]
+
+    shift=43*N_ID2
+    d_bin=np.roll(c,-shift)
+
+    d=(1-2*d_bin.astype(np.int8)).astype(np.float32)
+
+    return d
+
+
+def map_pss_to_fft_bins(pss127:np.ndarray, Nfft:int, k_min:int=-63) -> np.ndarray:
+    if len(pss127) != 127:
+        raise ValueError("pss127 must be length 127")
+
+    X=np.zeros(Nfft, dtype=np.complex64)
+
+    for i in range(127):
+        k=k_min+i
+        bin_idx=(k%Nfft)
+        X[bin_idx]=np.complex64(pss127[i])
+
+    return X
+
+def pss_time_domain(N_ID2: int, Nfft: int=2048, Ncp: int=144, k_min: int=-63):
+    pss=nr_pss(N_ID2)
+    X=map_pss_to_fft_bins(pss, Nfft, k_min)
+    x_td=np.fft.ifft(X).astype(np.complex64)
+    x_cp=np.concatenate([x_td[-Ncp:], x_td])
+
+    return x_cp
+
+
+    
+def nr_sss(N_ID1: int,N_ID2: int) -> np.ndarray:#生成频域sss序列
+    """
+    5G NR SSS per 3GPP TS 38.211 §7.4.2.3
+      - Length 127, BPSK in {+1, -1}
+      - 2 m-seq (degree-7, poly1 x^7 + x^4 + 1, poly2 x^7 + x + 1), init state = 0000001 on both
+      - cyclic shifts by m0 = 15*floor(N_ID1/112) + 5*N_ID2, m1 = N_ID1%112
+输入参数N_ID1(0~335)和N_ID2(0~2)，
+这两个参数组合起来N_ID^cell=3xN_ID1+N_ID2就可以标识1008个不同的物理小区ID
+    Returns: float32 array of shape (127,) with values in {+1, -1}
+    """
+    if N_ID2 not in (0, 1, 2):
+        raise ValueError("N_ID2 must be 0, 1, or 2")
+    if (N_ID1 < 0) or (N_ID1 > 335):
+        raise ValueError("N_ID1 must be 0...335")
+        
+    # LFSR state s[0..6], spec init: 0 0 0 0 0 0 0
+    s0 = np.array([1,0,0,0,0,0,0], dtype=np.uint8)
+    s1 = np.array([1,0,0,0,0,0,0], dtype=np.uint8)
+    #两个7阶线性反馈移位寄存器，对应多项式x^7+x^4+1和x^7+x+1，代码中初始状态s0和s1被设置为[1,0,0,0,0,0,0]
+
+    # Generate base m-sequence c(n), n=0..126
+   
+    c0 = np.empty(127, dtype=np.uint8)
+    c1 = np.empty(127, dtype=np.uint8)
+
+    for n in range(7):
+        c0[n] = s0[n]
+        c1[n] = s1[n]
+
+    for n in range(120):
+        c0[n+7] = c0[n] ^ c0[n+4]
+        c1[n+7] = c1[n] ^ c1[n+1]
+        
+    # Apply cyclic shift (43*N_ID2), d(n) = c(n + 43*N_ID2 mod 127)
+    m0 = 15 * (N_ID1//112) + 5*N_ID2
+    m1 = N_ID1 % 112
+    #循环以为根据公式计算出来的两个循环移位量m0和m1
+    
+    d0_bin = np.roll(c0, -m0)
+    d1_bin = np.roll(c1, -m1)
+    
+    # Map to BPSK: 0 -> +1, 1 -> -1
+    d = (1 - 2*d0_bin.astype(np.int8)).astype(np.float32) * (1 - 2*d1_bin.astype(np.int8)).astype(np.float32)
+   #将生成的两个二进制序列进行异或(模2加)
+    return d
+
+def map_sss_to_fft_bins(sss127:np.ndarray, Nfft:int, k_min:int=-56) -> np.ndarray:
+    if len(sss127) != 127:
+        raise ValueError("sss127 must be length 127")
+
+    X=np.zeros(Nfft, dtype=np.complex64)
+#56到182位置
+    for i in range(127):
+        k=k_min+i
+        bin_idx=(k%Nfft)
+        X[bin_idx]=np.complex64(sss127[i])
+
+    return X
+
+
+# --- Build time-domain OFDM symbol and add CP (length Ncp) ---
+def sss_time_domain(N_ID1: int, N_ID2: int, Nfft: int = 2048, Ncp: int = 144, k_min: int = -56):
+    sss = nr_sss(N_ID1,N_ID2)
+    X = map_sss_to_fft_bins(sss, Nfft, k_min)
+    x_td = np.fft.ifft(X).astype(np.complex64)      # no fftshift anywhere
+    x_cp = np.concatenate([x_td[-Ncp:], x_td])      # prepend cyclic prefix
+    return x_cp
+
+
+
+
+x0=pss_time_domain(0,2048,144,-64)
+x1=pss_time_domain(1,2048,144,-64)
+x2=pss_time_domain(2,2048,144,-64)
+
+x=sss_time_domain(200,2,2048,144,-64)
+
+N_fft, N_cp = 2048, 144
+N_sym = N_fft + N_cp
+sym1_pbch = np.zeros(N_sym, dtype=np.complex64) # 忽略 PBCH 数据，置 0
+sym3_pbch = np.zeros(N_sym, dtype=np.complex64)
+
+# 拼接成完整的一整个 SSB 块
+tx_sig = np.concatenate([x2, sym1_pbch, x, sym3_pbch])
+
+fs=61.44e6
+true_i=2
+true_Nf=300
+true_delta_f=3000
+
+channel=np.array([1.0+0.0j, 0.5*np.exp(1j*np.pi/4),0.3*np.exp(-1j*np.pi/3)])#三个信道
+rx_multipath=np.convolve(tx_sig, channel, mode='full')
+
+rx_delayed=np.concatenate([np.zeros(true_Nf, dtype=np.complex64), rx_multipath])#前面补0，频偏
+
+n=np.arange(len(rx_delayed))
+freq_offset_vec=np.exp(2j*np.pi*true_delta_f*n/fs)#载波频偏
+rx_shifted=rx_delayed*freq_offset_vec
+
+noise=(np.random.randn(len(rx_shifted))+1j*np.random.randn(len(rx_shifted)))*0.005
+y_recv=(rx_shifted+noise).astype(np.complex64)
+
+print(f"true ID={true_i}, true Nf={true_Nf}, true delta={true_delta_f}Hz")
+
+corr_0=np.abs(np.correlate(y_recv, x0, mode='full'))**2
+corr_1=np.abs(np.correlate(y_recv, x1, mode='full'))**2
+corr_2=np.abs(np.correlate(y_recv, x2, mode='full'))**2
+
+plt.figure(figsize=(10,5))
+plt.plot(corr_0, label='Matched Filter for x0')
+plt.plot(corr_1, label='Matched Filter for x1')
+plt.plot(corr_2, label='Matched Filter for x2')
+plt.title("Matched Filter Outputs (m=0)")
+plt.xlabel("Lag (Sample Index)")
+plt.ylabel("Correlation Power")
+plt.grid(True)
+plt.show()
+
+peaks=[np.max(corr_0), np.max(corr_1), np.max(corr_2)]
+est_i=np.argmax(peaks)#取最大值所在的参数
+print(f"most likely is i={est_i}")
+
+best_corr=[corr_0, corr_1, corr_2][est_i]
+max_idx=np.argmax(best_corr)#取出它的长度
+
+N_pss=len(x0)
+est_Nf=max_idx-(N_pss-1)#减去就得到N的偏移
+print(f"most likely Nf={est_Nf}")
+
+
+y_aligned=y_recv[est_Nf:est_Nf+N_pss]#通过时延，把完整pss取出来
+missing_len = N_pss - len(y_aligned)
+y_aligned = np.pad(y_aligned, (0, missing_len), mode='constant')#防止信号不够长，后方补0
+x_local=[x0,x1,x2][est_i]
+
+delta_f_min=100#最小分辨率
+m_values=np.arange(-75,76)#从-75到75
+Y_peaks=[]#把每次匹配出来的能量装进去
+n_seq=np.arange(N_pss)#生成序列0-2191，画旋转补偿向量
+
+for m in m_values:
+    freq_corr_vec=np.exp(-2j*np.pi*n_seq*m*delta_f_min/fs)#造一个反向旋转的向量，抵消频偏
+    Y_val=np.abs(np.sum(y_aligned*np.conj(x_local)*freq_corr_vec))**2#乘本地模板、补偿向量，求和、求平方
+    Y_peaks.append(Y_val)#记录结果，conj取共轭接收信号和本地模板相乘（匹配滤波）
+#如果m对应的频偏恰好等于接受信号里的真实频偏，那么freq_corr_vec就会把接收信号里原本旋转的相位摆正
+#y_aligned和x_local完美对其，同相相加，能量最大
+Y_peaks=np.array(Y_peaks)
+
+plt.figure(figsize=(10, 5))
+plt.plot(m_values * delta_f_min, Y_peaks, marker='.')
+plt.title("Frequency Offset Estimation Statistic Y")
+plt.xlabel("Frequency Offset (Hz)")
+plt.ylabel("Peak Value")
+plt.grid(True)
+plt.show()
+
+best_m = m_values[np.argmax(Y_peaks)]#找最大的，然后返回它的索引位置
+est_delta_f = best_m * delta_f_min
+print(f"delta = {est_delta_f} Hz (true delta {true_delta_f})")
+
+def binary_search_freq_offset(y, x, fs, bounds=(-7500, 7500), iterations=8):
+    low, high = bounds
+    for step in range(iterations):
+        mid1 = low + (high - low) / 3
+        mid2 = high - (high - low) / 3
+        
+        # 计算两个点的 Y 值
+        n_seq = np.arange(len(x))
+        Y_mid1 = np.abs(np.sum(y * np.conj(x) * np.exp(-2j * np.pi * n_seq * mid1 / fs)))**2
+        Y_mid2 = np.abs(np.sum(y * np.conj(x) * np.exp(-2j * np.pi * n_seq * mid2 / fs)))**2
+        
+        # 缩小范围
+        if Y_mid1 > Y_mid2:
+            high = mid2
+        else:
+            low = mid1
+            
+    return (low + high) / 2
+
+# 使用二分查找
+est_delta_f_binary = binary_search_freq_offset(y_aligned, x_local, fs, bounds=(-7500, 7500), iterations=25)
+print(f"delta binary= {est_delta_f_binary:.2f} Hz")
+
+
+
+N_sym = 2192  # 2192
+sss_start_idx = est_Nf + 2 * N_sym
+
+# 截取包含 SSS 的时域信号（长度为一个完整符号 2192）
+y_sss_cp = y_recv[sss_start_idx : sss_start_idx + N_sym]
+
+# 防止信号末尾不够截取，进行补零
+if len(y_sss_cp) < N_sym:
+    y_sss_cp = np.pad(y_sss_cp, (0, N_sym - len(y_sss_cp)), mode='constant')
+
+# 2. 去频偏（关键步骤）
+# 生成时间序列向量
+n = np.arange(N_sym)
+# 使用 PSS 阶段算出的 est_delta_f 进行反向旋转（注意有个负号）
+y_sss_no_freq = y_sss_cp * np.exp(-2j * np.pi * est_delta_f * n / fs)
+
+# 3. 去 CP
+# 扔掉前 144 个点，保留后面的 2048 个点
+N_cp = 144
+N_fft = 2048
+y_sss_time = y_sss_no_freq[N_cp : N_cp + N_fft]
+
+# 4. 做 2048 点 FFT 转到频域
+Y_sss_freq = np.fft.fft(y_sss_time)
+
+# 5. 提取 127 个子载波
+# 这里非常重要：提取逻辑必须和你在 PSS 阶段生成模板时一模一样！
+# 假设你之前的 k_min 是 -63 (或者根据你实际代码的 k_min 调整)
+k_min = -64
+rx_sss_127 = np.zeros(127, dtype=np.complex64)
+
+for i in range(127):
+    k = k_min + i
+    bin_idx = k % N_fft  # 取模是为了处理负频率索引
+    rx_sss_127[i] = Y_sss_freq[bin_idx]
+
+# 或者用更 Pythonic 的一行写法：
+# rx_sss_127 = Y_sss_freq[(k_min + np.arange(127)) % N_fft]
+    
+# 2. 提取 DTX 区域（SSS 左侧 48~55，右侧 183~191）
+# 注意：这里的 48, 55, 183 是相对于整个 SSB 块的相对索引，所以直接加 k_min
+dtx_indices = np.concatenate([np.arange(48, 56), np.arange(183, 192)])
+dtx_bins = (k_min + dtx_indices) % N_fft
+rx_dtx = Y_sss_freq[dtx_bins]
+
+print(f"SSSS regional average energy: {np.mean(np.abs(rx_sss_127)**2):.4f}")
+print(f"DTX regional average energy (noise-only): {np.mean(np.abs(rx_dtx)**2):.4f}")
+
+# --- 至此，已经成功提取出了接收到的 127 点 SSS 频域信号 ---
+
+# 验证：画出这 127 个点的模值和 IQ 星座图 (对应实验指导书 2a 和 2b)
+
+plt.figure(figsize=(12, 4))
+plt.plot(np.abs(Y_sss_freq), color='gray', alpha=0.8)
+plt.plot(np.abs(rx_sss_127), 'ro', markersize=2, label='SSS (127 points)')
+plt.title("Frequency Domain Modulus of Entire Symbol 2 (k_min=-64)")
+plt.xlabel("Subcarrier Index (FFT bins)")
+plt.ylabel("Magnitude")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+plt.figure(figsize=(12, 4))
+plt.subplot(1, 2, 1)
+plt.plot(np.abs(rx_sss_127), marker='.')
+plt.title("Complex Modulus of 127 SSS Elements")
+plt.grid(True)
+
+plt.subplot(1, 2, 2)
+plt.scatter(rx_sss_127.real, rx_sss_127.imag, alpha=0.6)
+plt.axhline(0, color='black', linewidth=0.5)
+plt.axvline(0, color='black', linewidth=0.5)
+plt.title("I/Q Constellation of Extracted SSS")
+plt.grid(True)
+plt.show()
+
+
+
+y_pss_cp = y_recv[est_Nf : est_Nf + N_sym]
+y_pss_no_freq = y_pss_cp * np.exp(-2j * np.pi * est_delta_f * np.arange(N_sym) / fs)
+y_pss_time = y_pss_no_freq[N_cp : N_cp + N_fft]
+Y_pss_freq = np.fft.fft(y_pss_time)
+
+k_min = -64
+rx_pss_127 = np.zeros(127, dtype=np.complex64)
+
+for i in range(127):
+    k = k_min + i
+    bin_idx = k % N_fft  # 取模是为了处理负频率索引
+    rx_pss_127[i] = Y_pss_freq[bin_idx]
+
+# 3. 最小二乘信道估计 H_pss
+local_pss_127 = nr_pss(est_i) # 用你前面匹配出的 est_i
+H_pss = np.conj(local_pss_127) * rx_pss_127
+
+# 4. 画出 127 点 IFFT 的信道时域冲激响应
+h_time = np.fft.ifft(H_pss)
+plt.figure(figsize=(10, 4))
+plt.stem(np.abs(h_time), basefmt=" ")
+plt.title("Time-Domain Channel Impulse Response (127-point IFFT of H_pss)")
+plt.xlabel("Delay Tap")
+plt.ylabel("Magnitude")
+plt.grid(True)
+plt.show()
+
+# =========================================================================
+# Step 2e: 信道补偿 (均衡)
+# =========================================================================
+# 零强制均衡 (Zero-Forcing)
+rx_sss_equalized = rx_sss_127 / H_pss
+# 防止除零导致复数爆炸 (nan_to_num)
+rx_sss_equalized = np.nan_to_num(rx_sss_equalized)
+#如果触发的结果出现了NaN(非数字)或者Inf(无穷大)，就把他们替换成0
+
+plt.figure(figsize=(6, 6))
+plt.scatter(rx_sss_equalized.real, rx_sss_equalized.imag, alpha=0.6, color='green')
+plt.axhline(0, color='black', linewidth=0.5)
+plt.axvline(0, color='black', linewidth=0.5)
+plt.title("I/Q Constellation of SSS After Channel Equalization")
+plt.xlim(-2, 2)
+plt.ylim(-2, 2)
+plt.grid(True)
+plt.show()
+
+
+# =========================================================================
+# Step 3 & 4: 数据检测 (寻找最佳 N_ID1 和 Cell ID)
+# =========================================================================
+best_N_ID1 = -1
+max_corr = -1
+
+for N_ID1_candidate in range(336):
+    # 生成本地标准的频域 SSS（长度127）
+    local_sss_candidate = nr_sss(N_ID1_candidate, est_i)
+    
+    # 与均衡后的接收信号做相关
+    corr_val = np.abs(np.sum(rx_sss_equalized * np.conj(local_sss_candidate)))
+    
+    if corr_val > max_corr:
+        max_corr = corr_val
+        best_N_ID1 = N_ID1_candidate
+
+# 最终计算 Cell ID
+final_cell_id = 3 * best_N_ID1 + est_i
+print(f"Detected N_ID1 = {best_N_ID1}")
+print(f"Detected N_ID2 = {est_i}")
+print(f"Final physical Cell ID = {final_cell_id}")
